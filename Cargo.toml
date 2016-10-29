@@ -1,0 +1,10 @@
+[package]
+name = "neovim-language-server"
+version = "0.1.0"
+authors = ["Tom Houlé <tom@tomhoule.com>"]
+
+[dependencies]
+jsonrpc-core = "3.0.2"
+neovim-lib = "0.1.0"
+slog = "1.2"
+# clap?
