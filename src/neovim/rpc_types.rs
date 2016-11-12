@@ -1,14 +1,17 @@
 use types::Position;
 use rmp::value::{Value, Integer};
+use supported_language::SupportedLanguage;
+use std::str::FromStr;
 
 #[derive(Debug)]
-pub enum RPCEvent {
+pub enum NeovimRPCEvent {
     NewCursorPosition(Position),
     TextChangedI,
+    BufRead(SupportedLanguage),
 }
 
 impl NeovimRPCEvent {
-    pub fn new(event: &str, values: Vec<Value>) -> Option<RPCEvent> {
+    pub fn new(event: &str, values: Vec<Value>) -> Option<Self> {
         match event {
             "language_server_new_cursor_position" => {
                 if let (&Value::Integer(Integer::U64(line)),
@@ -18,13 +21,24 @@ impl NeovimRPCEvent {
                         line: line,
                         character: character,
                     };
-                    Some(RPCEvent::NewCursorPosition(pos))
+                    Some(NeovimRPCEvent::NewCursorPosition(pos))
                 } else {
-                    panic!();
+                    None
                 }
             },
             "language_server_text_changed" => {
-                Some(RPCEvent::TextChangedI)
+                Some(NeovimRPCEvent::TextChangedI)
+            },
+            "lsp/bufread" => {
+                if let Value::String(ref lang) = values[0] {
+                    Some(
+                        NeovimRPCEvent::BufRead(
+                            SupportedLanguage::from_str(lang).unwrap()
+                            )
+                        )
+                } else {
+                    None
+                }
             },
             _ => None
         }

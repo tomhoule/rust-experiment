@@ -63,7 +63,7 @@ fn headers<'a, I: U8Input<Buffer=&'a [u8]>>(i: I) -> SimpleResult<I, Headers> {
         .bind::<_, _, Error<u8>>(|i, headers: Vec<Option<HeaderType>>| {
             i.ret(headers.iter().filter_map(|v| {
                 match v {
-                    &Some(ref header_type) => Some((header_type.as_key(), Box::new(header_type))),
+                    &Some(ref header_type) => Some((header_type.as_key(), Box::new(header_type.clone()))),
                     &None => None
                 }
             }).collect::<Headers>())
@@ -122,7 +122,7 @@ impl HeaderType {
     }
 }
 
-type Headers = HashMap<&'static str, HeaderType>;
+type Headers = HashMap<&'static str, Box<HeaderType>>;
 
 struct Content;
 /// Per the spec, calls can be batched and sent in one message as an array

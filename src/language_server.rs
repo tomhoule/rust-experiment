@@ -1,7 +1,6 @@
 use slog::Logger;
 use std::process::*;
 use std::marker::PhantomData;
-use neovim::RPCEvent;
 
 struct Request;
 struct Response;
