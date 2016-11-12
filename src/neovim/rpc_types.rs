@@ -1,6 +1,6 @@
 use types::Position;
 use rmp::value::{Value, Integer};
-use supported_language::SupportedLanguage;
+use supported_languages::SupportedLanguage;
 use std::str::FromStr;
 
 #[derive(Debug)]

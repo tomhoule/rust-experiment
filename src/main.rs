@@ -13,8 +13,8 @@ extern crate slog_term;
 mod language_server;
 mod message;
 mod neovim;
+mod supported_languages;
 mod types;
-mod supported_language;
 
 use neovim::NeovimRPCEvent;
 use neovim_lib::{Neovim, NeovimApi, Session};
