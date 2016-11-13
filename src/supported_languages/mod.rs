@@ -1,4 +1,6 @@
 use std::str::FromStr;
+use std::env;
+use std::process::*;
 
 #[derive(Debug)]
 pub enum SupportedLanguage {
@@ -13,6 +15,19 @@ impl FromStr for SupportedLanguage {
             "rust" => Ok(SupportedLanguage::Rust),
             "typescript" => Ok(SupportedLanguage::Typescript),
             _ => Err(()),
+        }
+    }
+}
+
+impl SupportedLanguage {
+    pub fn start_language_server(&self) -> Result<Child, ()> {
+        match *self {
+            SupportedLanguage::Rust => {
+                Ok(Command::new("rls").spawn().unwrap())
+            }
+            SupportedLanguage::Typescript => {
+                Ok(Command::new("./node_modules/typescript/bin/tsserver").spawn().unwrap())
+            }
         }
     }
 }

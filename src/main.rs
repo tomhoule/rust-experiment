@@ -1,18 +1,23 @@
 #![feature(question_mark)]
 #![feature(io)]
+#![feature(proc_macro)]
 
 #[macro_use] extern crate chomp;
+extern crate futures;
 extern crate jsonrpc_core;
+extern crate libc;
 extern crate neovim_lib;
 extern crate regex;
 extern crate rmp;
-extern crate futures;
+extern crate serde;
+#[macro_use] extern crate serde_derive;
 #[macro_use] extern crate slog;
 extern crate slog_term;
 
 mod language_server;
 mod message;
 mod neovim;
+mod requests;
 mod supported_languages;
 mod types;
 
@@ -120,11 +125,12 @@ fn main() {
 
     let event_handler = NeovimEventsHandler::new(root.clone(), &mut nvim);
 
-    let mut current_language_server = TSServer::new(root.clone());
+    let mut manager = LanguageServerManager::new(root.clone());
 
     event_handler.for_each(|event| {
         nvim.command(&format!("echo \"{:?}\"", event));
         debug!(root.clone(), "{:?}", event);
+        manager.handle_event(event);
         Ok(())
     }).wait();
 }

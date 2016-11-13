@@ -1,5 +1,9 @@
-use ::Request;
+use libc::getpid;
+use std::env::*;
+use std::path::PathBuf;
+use serde::ser::Serialize;
 
+#[derive(Serialize)]
 struct ClientCapabilities;
 
 enum TextDocumentSyncKind {
@@ -44,21 +48,30 @@ struct ServerCapabilities {
     renameProvider: Option<bool>,
 }
 
-struct InitializeRequest {
-    processId: Option<i32>;
-    rootPath: Option<String>;
-    initializationOptions: Option<String>;
-    capabilities: ClientCapabilities;
+#[derive(Serialize)]
+pub struct InitializeRequest {
+    processId: Option<i32>,
+    rootPath: Option<PathBuf>,
+    initializationOptions: Option<String>,
+    capabilities: ClientCapabilities,
 }
 
-impl Request for InitializeRequest {
-    fn make_message() -> RequestMessage<Self> {
-        IncompleteRequestMessage {
-            method: "initialize",
-            params: Self,
+impl InitializeRequest {
+    pub fn new() -> Self {
+        unsafe {
+            let pid = getpid();
+
+            InitializeRequest {
+                processId: Some(pid),
+                rootPath: Some(current_dir().unwrap()),
+                initializationOptions: None,
+                capabilities: ClientCapabilities { },
+            }
         }
     }
 }
+
+
 
 struct InitializeResult {
     capabilities: ServerCapabilities,

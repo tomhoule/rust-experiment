@@ -31,11 +31,7 @@ impl NeovimRPCEvent {
             },
             "lsp/bufread" => {
                 if let Value::String(ref lang) = values[0] {
-                    Some(
-                        NeovimRPCEvent::BufRead(
-                            SupportedLanguage::from_str(lang).unwrap()
-                            )
-                        )
+                    Some(NeovimRPCEvent::BufRead(SupportedLanguage::from_str(lang).unwrap()))
                 } else {
                     None
                 }
