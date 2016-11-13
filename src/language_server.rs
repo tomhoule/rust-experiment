@@ -6,21 +6,24 @@ use supported_languages::SupportedLanguage;
 use neovim::NeovimRPCEvent;
 use requests::*;
 use futures::{Async, Future, Poll};
-use futures::stream::{Stream, BoxStream, Filter};
+use futures::stream::{Stream, BoxStream, Filter, empty};
 use std::sync::mpsc;
 use std::sync::Mutex;
-use std::collections::HashMap;
 use uuid::Uuid;
 use std::thread::spawn;
-use serde::Serialize;
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_json;
+use std::collections::VecDeque;
+use broker::Event;
 
 type LsEventStream = BoxStream<LsRpcEvent, ()>;
 
+#[derive(Debug, Deserialize)]
 struct Response {
     id: Uuid,
 }
 
+#[derive(Debug, Deserialize)]
 struct Notification { }
 
 struct ResponseObserver {
@@ -42,12 +45,14 @@ impl ResponseListener {
 }
 
 impl ResponseListener {
-    fn filter_events(&mut self, event: &LsRpcEvent) -> bool {
-        if let LsRpcEvent::Response(response) = *event {
+    fn filter_events(&mut self, event: LsRpcEvent) -> bool {
+        if let LsRpcEvent::Response(response) = event {
             let mut observers = self.observers.lock().unwrap();
-            for observer in *observers {
+            let response = response;
+            for observer in observers.iter_mut() {
                 if observer.request_id == response.id {
                     observer.response = Some(response);
+                    break
                 }
             }
             false
@@ -60,6 +65,7 @@ impl ResponseListener {
 pub struct LanguageServerManager {
     logger: Logger,
     server: Option<LanguageServerWrapper>,
+    pub events: BoxStream<LsRpcEvent, ()>,
 }
 
 impl LanguageServerManager {
@@ -67,6 +73,7 @@ impl LanguageServerManager {
         LanguageServerManager {
             logger: logger,
             server: None,
+            events: empty().boxed(),
         }
     }
 
@@ -74,27 +81,7 @@ impl LanguageServerManager {
         self.server = Some(LanguageServerWrapper::new(language, self.logger.clone()));
     }
 
-    // pub fn handle_event(&mut self, event: NeovimRPCEvent) {
-    //     match event {
-    //         NeovimRPCEvent::BufRead(lang) => {
-    //             self.server = Some(LanguageServerWrapper::new(lang, self.logger.clone()));
-    //         }
-    //         _ => {
-    //             if let Some(ref mut server) = self.server {
-    //                 server.handle_event(event);
-    //             }
-    //         }
-    //     }
-    // }
-
     pub fn request() { }
-    // pub fn notify(&mut self, notification: String) {
-    //     if let Some(LanguageServerWrapper::Running(server)) = self.server {
-    //         server.notify(notification);
-    //     } else {
-    //         panic!();
-    //     }
-    // }
 }
 
 pub enum LanguageServerWrapper {
@@ -109,22 +96,27 @@ impl LanguageServerWrapper {
         let mut started_server = new_server.start();
         LanguageServerWrapper::Running(started_server)
     }
-
-    // fn handle_event(&mut self, event: NeovimRPCEvent) {
-    //     match self {
-    //         &mut LanguageServerWrapper::Running(ref mut server) => server.handle_event(event),
-    //         _ => (),
-    //     }
-    // }
 }
 
 
 struct Starting { }
 
-// #[derive(Deserialize)]
-enum LsRpcEvent {
+#[derive(Debug)]
+pub enum LsRpcEvent {
     Response(Response),
     Notification(Notification),
+}
+
+impl Deserialize for LsRpcEvent {
+    fn deserialize<D: Deserializer>(deserializer: &mut D) -> Result<Self, D::Error> {
+        if let Ok(response) = Response::deserialize(deserializer) {
+            Ok(LsRpcEvent::Response(response))
+        } else {
+            Notification::deserialize(deserializer).and_then(|notification| {
+                Ok(LsRpcEvent::Notification(notification))
+            })
+        }
+    }
 }
 
 #[derive(Serialize)]
@@ -190,10 +182,11 @@ impl LanguageServer<Starting> {
         let (event_sender, event_receiver) = mpsc::channel::<LsRpcEvent>();
         let (request_sender, request_receiver) = mpsc::channel::<LsRpcRequest>();
         spawn(move || {
+            let mut process = process;
             loop {
                 let mut buf = String::new();
                 process.stdout.as_mut().map(|mut s| s.read_to_string(&mut buf));
-                event_sender.send(serde_json::from_str::<LsRpcEvent>(&buf));
+                event_sender.send(serde_json::from_str::<LsRpcEvent>(&buf).unwrap());
 
                 if let Ok(request) = request_receiver.recv() {
                     process.stdin.as_mut().map(|mut s| request.write(s));
@@ -224,23 +217,7 @@ impl LanguageServer<Starting> {
 }
 
 impl LanguageServer<Running> {
-    // /// Utility method used by notify and request
-    // fn send(&mut self, request: &str) {
-    //     let message = format!("{}", request);
-    //     debug!(self.logger, "Sending {:?}", message);
-    //     self.state.process.stdin.as_mut().map(|s| {
-    //         s.write("Content-Length: ".as_bytes());
-    //         s.write(format!("{}", message.len()).as_bytes());
-    //         s.write("\r\n\r\n".as_bytes());
-    //         s.write(message.as_bytes());
-    //     });
-    // }
-
-    // pub fn notify(&mut self, notification: String) {
-    //     self.send(notification);
-    // }
-
-    pub fn request(&mut self, request: String) -> Box<Future<Item=String, Error=()>> {
+    pub fn request(&mut self, request: String) -> Box<Future<Item=Response, Error=()>> {
         // spawns a thread, sends the request, listens on the stream for the response
         // sends the requests, spawn a thread and listen
         let uuid = "1234";
@@ -259,15 +236,3 @@ impl Stream for Running {
         }
     }
 }
-
-// impl Stream for LanguageServer<Running> {
-//     type Item = String;
-//     type Error = String;
-
-//     fn poll(&mut self) -> Poll<Option<Self::Item>, ()> {
-//         match self.listener.recv() {
-//             Ok(event) => Ok(Async::Ready(Some(event))),
-//             Err(_) => Ok(Async::NotReady),
-//         }
-//     }
-// }
