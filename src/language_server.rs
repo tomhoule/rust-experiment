@@ -68,6 +68,8 @@ struct Running {
     // text_buffer: String,
     // stdout_buffer: String,
     process: Child,
+    // id -> Future to be resolved with the response
+    // requests: HashMap<i32, Box<Future<Item=i32, Error=i32>>>,
 }
 
 impl Running {
