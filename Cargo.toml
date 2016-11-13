@@ -13,6 +13,8 @@ libc = "*"
 rmp = "*"
 regex = "*"
 serde = "*"
+serde_json = "*"
 serde_derive = "*"
 slog = "1.2"
 slog-term = "*"
+uuid = { version = "*", features = ["serde", "v4"] }

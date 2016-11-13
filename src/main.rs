@@ -1,6 +1,8 @@
 #![feature(question_mark)]
 #![feature(io)]
 #![feature(proc_macro)]
+#![feature(conservative_impl_trait)]
+#![feature(unboxed_closures)]
 
 #[macro_use] extern crate chomp;
 extern crate futures;
@@ -11,8 +13,10 @@ extern crate regex;
 extern crate rmp;
 extern crate serde;
 #[macro_use] extern crate serde_derive;
+extern crate serde_json;
 #[macro_use] extern crate slog;
 extern crate slog_term;
+extern crate uuid;
 
 mod language_server;
 mod message;
@@ -25,7 +29,7 @@ use neovim::NeovimRPCEvent;
 use neovim_lib::{Neovim, NeovimApi, Session};
 use language_server::*;
 
-use futures::stream::Stream;
+use futures::stream::{Stream, BoxStream};
 use futures::{Async, Future, Poll};
 use slog::*;
 use std::sync::mpsc;
@@ -42,6 +46,51 @@ type LanguageServerRPCEvent = ();
 //      neovim_events: S,
 //      language_server: LanguageServerWrapper,
 // }
+
+struct NeovimManager {
+    neovim: Neovim,
+    events: NeovimEventsHandler,
+    // events: BoxStream<NeovimRPCEvent, NeovimRPCError>,
+}
+
+impl NeovimManager {
+    fn new(logger: Logger) -> Self {
+        let nvim_session = Session::new_tcp("127.0.0.1:6666").unwrap();
+        let mut nvim = Neovim::new(nvim_session);
+        let event_handler = NeovimEventsHandler::new(logger, &mut nvim);
+
+        NeovimManager {
+            neovim: nvim,
+            events: event_handler,
+        }
+    }
+}
+
+struct Broker {
+    neovim: NeovimManager,
+    language_server: LanguageServerManager,
+    logger: Logger,
+}
+
+impl Broker {
+    fn new(logger: Logger) -> Self {
+
+        Broker {
+            neovim: NeovimManager::new(logger),
+            language_server: LanguageServerManager::new(logger),
+            logger: logger,
+        }
+    }
+
+    fn start(&self) {
+        self.neovim.events.for_each(|event| {
+            self.neovim.neovim.command(&format!("echo \"{:?}\"", event));
+            debug!(self.logger, "{:?}", event);
+            // manager.handle_event(event);
+            Ok(())
+        }).wait();
+    }
+}
 
 // impl Broker<S, T> {
 //     fn change_file(path: &str) -> Result<(), String> { unimplemented!() }
@@ -101,7 +150,7 @@ impl Stream for NeovimEventsHandler {
     fn poll(&mut self) -> Poll<Option<NeovimRPCEvent>, ()> {
         match self.receiver.recv() {
             Ok(event) => Ok(Async::Ready(Some(event))),
-            Err(_) => Ok(Async::NotReady)
+            Err(_) => Ok(Async::NotReady),
         }
     }
 }
@@ -120,17 +169,4 @@ fn main() {
 
     info!(root, "Starting up");
 
-    let nvim_session = Session::new_tcp("127.0.0.1:6666").unwrap();
-    let mut nvim = Neovim::new(nvim_session);
-
-    let event_handler = NeovimEventsHandler::new(root.clone(), &mut nvim);
-
-    let mut manager = LanguageServerManager::new(root.clone());
-
-    event_handler.for_each(|event| {
-        nvim.command(&format!("echo \"{:?}\"", event));
-        debug!(root.clone(), "{:?}", event);
-        manager.handle_event(event);
-        Ok(())
-    }).wait();
 }
